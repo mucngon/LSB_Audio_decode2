@@ -1,0 +1,58 @@
+# Base image
+ARG registry
+FROM $registry/labtainer.base2
+
+ARG lab
+ARG labdir
+ARG imagedir
+ARG user_name
+ARG password
+ARG apt_source
+ARG version
+LABEL version=$version
+ENV APT_SOURCE $apt_source
+
+RUN /usr/bin/apt-source.sh
+
+# Install system packages
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3-numpy \
+    python3-matplotlib \
+    python3-scipy \
+    libsndfile1 \
+    portaudio19-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages (remove wave)
+RUN pip3 install --no-cache-dir pyaudio pydub
+
+# Create symbolic link for 'python'
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+
+# System files
+ADD $labdir/$imagedir/sys_tar/sys.tar /
+ADD $labdir/sys_$lab.tar.gz /
+
+# Add user
+RUN useradd -ms /bin/bash $user_name
+RUN echo "$user_name:$password" | chpasswd
+RUN adduser $user_name sudo
+
+# Switch to user
+USER $user_name
+ENV HOME /home/$user_name
+
+# Add home files
+ADD $labdir/$imagedir/home_tar/home.tar $HOME
+RUN rm -f $HOME/home.tar
+ADD $labdir/$lab.tar.gz $HOME
+
+# Python path
+ENV PYTHONPATH=$HOME:$PYTHONPATH
+
+USER root
+CMD ["/bin/bash", "-c", "exec /sbin/init --log-target=journal 3>&1"]
+
